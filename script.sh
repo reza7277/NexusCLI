@@ -1,6 +1,24 @@
 #!/bin/bash
 
-set -e  # Stop script execution on error
+# Function to display a banner
+display_banner() {
+    echo "
+██████╗ ███████╗███████╗ █████╗     ███████╗██████╗ ███████╗███████╗
+██╔══██╗██╔════╝╚══███╔╝██╔══██╗    ╚════██║╚════██╗╚════██║╚════██║
+██████╔╝█████╗    ███╔╝ ███████║        ██╔╝ █████╔╝    ██╔╝    ██╔╝
+██╔══██╗██╔══╝   ███╔╝  ██╔══██║       ██╔╝ ██╔═══╝    ██╔╝    ██╔╝ 
+██║  ██║███████╗███████╗██║  ██║       ██║  ███████╗   ██║     ██║  
+╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝       ╚═╝  ╚══════╝   ╚═╝     ╚═╝  
+"
+    echo "Created by: Reza"
+    echo "Join us: https://t.me/Web3loverz"
+}
+
+# Display the banner
+display_banner
+
+# Wait for 3 seconds before continuing
+sleep 3
 
 # 1. Install dependencies
 echo "Updating system and installing dependencies..."
@@ -39,7 +57,11 @@ cargo install --force protobuf-codegen
 rustup target add riscv32i-unknown-none-elf
 rustup component add rust-src
 
-# 6. Install Nexus
+# 6. Install Nexus CLI from official source
+echo "Installing Nexus CLI from official source..."
+curl https://cli.nexus.xyz/ | sh
+
+# 7. Install Nexus
 echo "Installing Nexus CLI..."
 mkdir -p $HOME/.nexus
 cd $HOME/.nexus
@@ -59,41 +81,15 @@ else
     git checkout $(git rev-list --tags --max-count=1)
 fi
 
-# 7. Build and run CLI
+# 8. Build and run Nexus CLI
 echo "Building Nexus CLI..."
 cd clients/cli
 cargo clean
 cargo build --release
 
-# Install Nexus CLI from official URL
-echo "Installing Nexus CLI from official source..."
-curl https://cli.nexus.xyz/ | sh
-
 echo "Running Nexus CLI..."
 cargo run --release start --beta
 
-# Console for rich output
-from rich.console import Console
-from rich.panel import Panel
-
-# Function to display a banner
-def display_banner():
-    banner = """
-██████╗ ███████╗███████╗ █████╗     ███████╗██████╗ ███████╗███████╗
-██╔══██╗██╔════╝╚══███╔╝██╔══██╗    ╚════██║╚════██╗╚════██║╚════██║
-██████╔╝█████╗    ███╔╝ ███████║        ██╔╝ █████╔╝    ██╔╝    ██╔╝
-██╔══██╗██╔══╝   ███╔╝  ██╔══██║       ██╔╝ ██╔═══╝    ██╔╝    ██╔╝ 
-██║  ██║███████╗███████╗██║  ██║       ██║  ███████╗   ██║     ██║  
-╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝       ╚═╝  ╚══════╝   ╚═╝     ╚═╝  
-"""
-    # Add your name and telegram link
-    footer = """
-Created by: [bold yellow]Reza[/bold yellow]
-Join us: [link=https://t.me/Web3loverz][bold blue]Web3loverz Telegram[/bold blue][/link]
-    """
-    
-    console = Console()
-    console.print(Panel(f"{banner}\n{footer}", title="Wallet Checker", subtitle="Version 1.0", style="bold green"))
-
-# Call the function to display the banner
-display_banner()
+# Final installation of Nexus CLI
+echo "Running final Nexus CLI installation..."
+curl https://cli.nexus.xyz/ | sh
