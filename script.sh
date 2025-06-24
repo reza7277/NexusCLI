@@ -90,7 +90,7 @@ if [ -z "\$NODE_ID" ]; then
 fi
 echo "\$NODE_ID" > "\$PROVER_ID_FILE"
 screen -S nexus -X quit >/dev/null 2>&1 || true
-screen -dmS nexus bash -c "nexus-network start --node-id \$NODE_ID &>> /root/nexus.log"
+screen -dmS nexus bash -c "nexus-network start --node-id \$NODE_ID 2>&1 | sed 's/\x1b\[[0-9;]*m//g' >> /root/nexus.log"
 sleep 3
 if screen -list | grep -q "nexus"; then
     echo "Node is running in background"
