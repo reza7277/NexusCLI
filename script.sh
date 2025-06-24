@@ -233,12 +233,12 @@ function uninstall_all_nodes() {
 # === MAIN MENU ===
 while true; do
     show_header
-    echo -e "${GREEN} 1.${RESET} ➕ Install & Run Node"
-    echo -e "${GREEN} 2.${RESET} 📊 View All Node Status"
-    echo -e "${GREEN} 3.${RESET} ❌ Uninstall Specific Node"
-    echo -e "${GREEN} 4.${RESET} 🧾 View Node Logs"
-    echo -e "${GREEN} 5.${RESET} 💥 Uninstall All Nodes"
-    echo -e "${GREEN} 6.${RESET} 🚪 Exit"
+    echo -e "${GREEN} 1.${RESET}  Install & Run Node"
+    echo -e "${GREEN} 2.${RESET}  View All Node Status"
+    echo -e "${GREEN} 3.${RESET}  Uninstall Specific Node"
+    echo -e "${GREEN} 4.${RESET}  View Node Logs"
+    echo -e "${GREEN} 5.${RESET}  Uninstall All Nodes"
+    echo -e "${GREEN} 6.${RESET}  Exit"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
     read -rp "Choose an option (1-6): " choice
     case $choice in
