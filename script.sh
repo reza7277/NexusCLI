@@ -15,8 +15,16 @@ display_banner() {
     echo "Join us: https://t.me/Web3loverz"
 }
 
-clear
-display_banner
+# Display menu header
+show_header() {
+    clear
+    display_banner
+    echo
+    echo "==================== NEXUS - CLI Node ===================="
+}
+
+# Clear screen and show banner on start
+show_header
 
 # === Begin Nexus.sh from upstream repository ===
 
@@ -30,14 +38,7 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 RESET='\033[0m'
 
-function show_header() {
-  clear
-  echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo -e "       NEXUS - Airdrop Node"
-  echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-}
-
-function check_docker() {
+check_docker() {
   if ! command -v docker >/dev/null 2>&1; then
     echo -e "${YELLOW}Docker not found.\nInstalling Docker...${RESET}"
     apt update
@@ -51,7 +52,7 @@ function check_docker() {
   fi
 }
 
-function check_cron() {
+check_cron() {
   if ! command -v cron >/dev/null 2>&1; then
     echo -e "${YELLOW}Cron not found.\nInstalling cron...${RESET}"
     apt update
@@ -61,7 +62,7 @@ function check_cron() {
   fi
 }
 
-function build_image() {
+build_image() {
   WORKDIR=$(mktemp -d)
   cd "$WORKDIR"
   cat > Dockerfile <<EOF
@@ -73,7 +74,7 @@ EOF
   rm -rf "$WORKDIR"
 }
 
-function run_container() {
+run_container() {
   local node_id=$1
   local container_name="${BASE_CONTAINER_NAME}-${node_id}"
   local log_file="${LOG_DIR}/nexus-${node_id}.log"
@@ -92,7 +93,7 @@ function run_container() {
   echo "0 0 * * * rm -f $log_file" > "/etc/cron.d/nexus-log-cleanup-${node_id}"
 }
 
-function uninstall_node() {
+uninstall_node() {
   local node_id=$1
   local cname="${BASE_CONTAINER_NAME}-${node_id}"
 
@@ -100,17 +101,17 @@ function uninstall_node() {
   rm -f "${LOG_DIR}/nexus-${node_id}.log" "/etc/cron.d/nexus-log-cleanup-${node_id}"
 }
 
-function get_all_nodes() {
+get_all_nodes() {
   docker ps -a --format "{{.Names}}" \
     | grep "^${BASE_CONTAINER_NAME}-" \
     | sed "s/${BASE_CONTAINER_NAME}-//"
 }
 
-function list_nodes() {
+list_nodes() {
   show_header
   echo -e "${CYAN} Registered Nodes:${RESET}"
   echo "--------------------------------------------------------------"
-  printf "% -5s % -20s % -12s % -15s % -15s\n" "No" "Node ID" "Status" "CPU" "Memory"
+  printf "%-5s %-20s %-12s %-15s %-15s\n" "No" "Node ID" "Status" "CPU" "Memory"
   echo "--------------------------------------------------------------"
 
   local all_nodes=($(get_all_nodes))
@@ -133,7 +134,7 @@ function list_nodes() {
       fi
     fi
 
-    printf "% -5s % -20s % -12s % -15s % -15s\n" \
+    printf "%-5s %-20s %-12s %-15s %-15s\n" \
       "$((i+1))" "$node_id" "$status" "$cpu" "$mem"
   done
   echo "--------------------------------------------------------------"
@@ -148,7 +149,7 @@ function list_nodes() {
   read -p "Press enter to return to menu..." dummy
 }
 
-function view_logs() {
+view_logs() {
   local all_nodes=($(get_all_nodes))
   if [ ${#all_nodes[@]} -eq 0 ]; then
     echo "No nodes available."
@@ -163,13 +164,13 @@ function view_logs() {
   read -rp "Number: " choice
 
   if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice > 0 && choice <= ${#all_nodes[@]} )); then
-    docker logs -f "${BASE_CONTAINER_NAME}-${all_nodes[$((choice-1))]}"\Console
+    docker logs -f "${BASE_CONTAINER_NAME}-${all_nodes[$((choice-1))]}"
   fi
 
   read -p "Press enter..." dummy
 }
 
-function remove_nodes() {
+remove_nodes() {
   local all_nodes=($(get_all_nodes))
   echo "Enter numbers to remove (space-separated):"
   for i in "${!all_nodes[@]}"; do
@@ -186,7 +187,7 @@ function remove_nodes() {
   read -p "Press enter..." dummy
 }
 
-function remove_all_nodes() {
+remove_all_nodes() {
   read -rp "Confirm remove ALL nodes? (y/n): " confirm
 
   if [[ "$confirm" =~ ^[Yy]$ ]]; then
