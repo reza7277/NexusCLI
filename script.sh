@@ -1,7 +1,10 @@
 #!/bin/bash
+set -e
 
-# Function to display a banner
+echo "[DEBUG] $(date '+%Y-%m-%d %H:%M:%S') - Script started"
+
 display_banner() {
+    echo "[DEBUG] Entering display_banner"
     echo "
 ██████╗ ███████╗███████╗ █████╗     ███████╗██████╗ ███████╗███████╗
 ██╔══██╗██╔════╝╚══███╔╝██╔══██╗    ╚════██║╚════██╗╚════██║╚════██║
@@ -14,82 +17,216 @@ display_banner() {
     echo "Join us: https://t.me/Web3loverz"
 }
 
-# Display the banner
+clear
 display_banner
 
-# Wait for 3 seconds before continuing
-sleep 3
+show_header() {
+    echo "[DEBUG] Entering show_header"
+    clear
+display_banner
+echo
+ echo "==================== NEXUS - Airdrop Node ===================="
+}
 
-# 1. Install dependencies
-echo "Updating system and installing dependencies..."
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y curl git build-essential pkg-config libssl-dev unzip
+echo "[DEBUG] Initializing variables"
+BASE_CONTAINER_NAME="nexus-node"
+IMAGE_NAME="nexus-node:latest"
+LOG_DIR="/root/nexus_logs"
 
-# 2. Install Cargo and Rust
-echo "Installing Rust and Cargo..."
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source $HOME/.cargo/env
+echo "[DEBUG] Setting terminal colors"
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+RESET='\033[0m'
 
-# Ensure Rust environment is always loaded
-echo 'source $HOME/.cargo/env' >> ~/.bashrc
-source ~/.bashrc
+check_docker() {
+    echo "[DEBUG] Checking Docker availability"
+    if ! command -v docker &>/dev/null; then
+        echo -e "${YELLOW}Docker not found. Installing...${RESET}"
+        apt update && apt install -y apt-transport-https ca-certificates curl software-properties-common
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+        add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+        apt update && apt install -y docker-ce
+        systemctl enable --now docker
+        echo "[DEBUG] Docker installed"
+    else
+        echo "[DEBUG] Docker is already installed"
+    fi
+}
 
-# 3. Check versions
-echo "Checking versions..."
-rustc --version
-cargo --version
-rustup update
+check_cron() {
+    echo "[DEBUG] Checking Cron availability"
+    if ! command -v cron &>/dev/null; then
+        echo -e "${YELLOW}Cron not found. Installing...${RESET}"
+        apt update && apt install -y cron
+        systemctl enable --now cron
+        echo "[DEBUG] Cron installed"
+    else
+        echo "[DEBUG] Cron is already installed"
+    fi
+}
 
-# 4. Install Protobuf
-echo "Installing Protobuf..."
-wget -q https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-linux-x86_64.zip
-unzip -o protoc-21.12-linux-x86_64.zip -d $HOME/.local > /dev/null
-rm protoc-21.12-linux-x86_64.zip
+build_image() {
+    echo "[DEBUG] Starting image build"
+    temp_dir=$(mktemp -d)
+    echo "[DEBUG] Created temp dir: $temp_dir"
+    if [ -f Dockerfile ]; then cp Dockerfile "$temp_dir/"; fi
+    cd "$temp_dir" || exit
+    if [ ! -f Dockerfile ]; then
+        cat > Dockerfile <<EOF
+FROM ubuntu:20.04
+EOF
+        echo "[DEBUG] Generated default Dockerfile"
+    fi
+    echo "[DEBUG] Running docker build -t $IMAGE_NAME"
+    docker build -t "$IMAGE_NAME" .
+    echo "[DEBUG] Docker image built: $IMAGE_NAME"
+    cd - || exit
+    rm -rf "$temp_dir"
+    echo "[DEBUG] Removed temp dir: $temp_dir"
+}
 
-export PATH="$HOME/.local/bin:$PATH"
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+run_container() {
+    local id=$1
+    echo "[DEBUG] Running container for node ID: $id"
+    local name="${BASE_CONTAINER_NAME}-${id}"
+    local log_file="${LOG_DIR}/nexus-${id}.log"
 
-# Install Protobuf Codegen
-cargo install --force protobuf-codegen
+    mkdir -p "$LOG_DIR"
+    touch "$log_file"
+    chmod 644 "$log_file"
+    echo "[DEBUG] Prepared log file: $log_file"
 
-# 5. Add Rust target and components
-rustup target add riscv32i-unknown-none-elf
-rustup component add rust-src
+    docker rm -f "$name" &>/dev/null || true
+    echo "[DEBUG] Removed existing container if any: $name"
+    docker run -d --rm --name "$name" \
+        -v "${log_file}":/root/nexus.log \
+        -e NODE_ID="$id" \
+        "$IMAGE_NAME"
+    echo "[DEBUG] Container started: $name"
 
-# 6. Install Nexus CLI from official source
-echo "Installing Nexus CLI from official source..."
-curl https://cli.nexus.xyz/ | sh
+    check_cron
+    echo "0 0 * * * rm -f ${log_file}" > "/etc/cron.d/nexus-log-cleanup-${id}"
+    echo "[DEBUG] Cron job created: nexus-log-cleanup-${id}"
+}
 
-# 7. Install Nexus
-echo "Installing Nexus CLI..."
-mkdir -p $HOME/.nexus
-cd $HOME/.nexus
+uninstall_node() {
+    local id=$1
+    echo "[DEBUG] Uninstalling node ID: $id"
+    local name="${BASE_CONTAINER_NAME}-${id}"
+    docker rm -f "$name" &>/dev/null || true
+    rm -f "${LOG_DIR}/nexus-${id}.log" "/etc/cron.d/nexus-log-cleanup-${id}"
+    echo "[DEBUG] Removed node: $id"
+}
 
-if [ -d "network-api" ]; then
-    echo "Updating existing repository..."
-    cd network-api
-    git fetch --tags
-    latest_tag=$(git rev-list --tags --max-count=1)
-    git checkout "$latest_tag"
-    git pull origin "$latest_tag"
-else
-    echo "Cloning Nexus repository..."
-    git clone https://github.com/nexus-xyz/network-api
-    cd network-api
-    git fetch --tags
-    git checkout $(git rev-list --tags --max-count=1)
-fi
+get_all_nodes() {
+    echo "[DEBUG] Retrieving all nodes"
+    docker ps -a --format "{{.Names}}" | grep "^${BASE_CONTAINER_NAME}-" | sed "s/${BASE_CONTAINER_NAME}-//"
+}
 
-# 8. Build and run Nexus CLI
-echo "Building Nexus CLI..."
-cd clients/cli
-cargo clean
-cargo build --release
+list_nodes() {
+    echo "[DEBUG] Listing nodes"
+    show_header
+    printf "%-5s %-20s %-12s %-10s %-10s
+" "No" "Node ID" "Status" "CPU" "Memory"
+    echo "---------------------------------------------------------------"
+    mapfile -t nodes < <(get_all_nodes)
+    if [ "${#nodes[@]}" -eq 0 ]; then echo "[DEBUG] No nodes found"; fi
+    for i in "${!nodes[@]}"; do
+        id=${nodes[$i]}
+        name="${BASE_CONTAINER_NAME}-${id}"
+        status=$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null || echo "absent")
+        if [ "$status" = "running" ]; then
+            stats=$(docker stats --no-stream --format "{{.CPUPerc}}|{{.MemUsage}}" "$name")
+            cpu=${stats%%|*}
+            mem=${stats#*|}
+        else
+            cpu="N/A"
+            mem="N/A"
+        fi
+        printf "%-5s %-20s %-12s %-10s %-10s
+" "$((i+1))" "$id" "$status" "$cpu" "$mem"
+    done
+    read -rp "Press Enter to continue..." dummy
+}
 
-echo "Running Nexus CLI..."
-cargo run --release start --beta
+view_logs() {
+    echo "[DEBUG] Viewing logs"
+    mapfile -t nodes < <(get_all_nodes)
+    if [ "${#nodes[@]}" -eq 0 ]; then echo "No nodes found."; read -rp "Press Enter..." dummy; return; fi
+    for i in "${!nodes[@]}"; do echo "$((i+1))). ${nodes[$i]}"; done
+    read -rp "Select node number: " choice
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#nodes[@]}" ]; then
+        echo "[DEBUG] Showing logs for node: ${nodes[$((choice-1))]}"
+        docker logs -f "${BASE_CONTAINER_NAME}-${nodes[$((choice-1))]}"
+    fi
+    read -rp "Press Enter..." dummy
+}
 
-# Final installation of Nexus CLI
-echo "Running final Nexus CLI installation..."
-curl https://cli.nexus.xyz/ | sh
+remove_nodes() {
+    echo "[DEBUG] Removing nodes"
+    mapfile -t nodes < <(get_all_nodes)
+    echo "Enter node numbers to remove (space-separated):"
+    for i in "${!nodes[@]}"; do echo "$((i+1))). ${nodes[$i]}"; done
+    read -rp "Choice: " input
+    for num in $input; do
+        if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#nodes[@]}" ]; then
+            uninstall_node "${nodes[$((num-1))]}"
+        fi
+    done
+    read -rp "Press Enter..." dummy
+}
+
+remove_all_nodes() {
+    echo "[DEBUG] Removing all nodes"
+    read -rp "Remove ALL nodes? (y/n): " ans
+    if [[ "$ans" =~ ^[Yy]$ ]]; then
+        mapfile -t nodes < <(get_all_nodes)
+        for id in "${nodes[@]}"; do uninstall_node "$id"; done
+    fi
+    read -rp "Press Enter..." dummy
+}
+
+while true; do
+    echo "[DEBUG] Main menu prompt"
+    show_header
+    echo "1) Install & Run Node"
+    echo "2) List Nodes"
+    echo "3) Remove Nodes"
+    echo "4) View Node Logs"
+    echo "5) Remove All Nodes"
+    echo "6) Exit"
+    read -rp "Select an option [1-6]: " opt
+    echo "[DEBUG] Selected option: $opt"
+    case $opt in
+        1)
+            check_docker
+            read -rp "Enter NODE_ID: " nid
+            echo "[DEBUG] NODE_ID entered: $nid"
+            if [ -n "$nid" ]; then
+                build_image
+                run_container "$nid"
+            fi
+            ;;
+        2)
+            list_nodes
+            ;;
+        3)
+            remove_nodes
+            ;;
+        4)
+            view_logs
+            ;;
+        5)
+            remove_all_nodes
+            ;;
+        6)
+            echo "[DEBUG] Exiting"
+            exit 0
+            ;;
+        *)
+            echo "[DEBUG] Invalid option: $opt"
+            ;;
+    esac
+done
